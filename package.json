@@ -1,0 +1,29 @@
+{
+  "name": "proroom",
+  "private": true,
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "clean": "turbo clean",
+    "dev:web": "turbo dev --filter=@proroom/web",
+    "dev:api": "turbo dev --filter=@proroom/api",
+    "build:web": "turbo build --filter=@proroom/web",
+    "build:api": "turbo build --filter=@proroom/api",
+    "db:push": "pnpm --filter @proroom/api exec prisma db push",
+    "db:migrate": "pnpm --filter @proroom/api exec prisma migrate dev",
+    "db:generate": "pnpm --filter @proroom/api exec prisma generate",
+    "db:seed": "pnpm --filter @proroom/api exec prisma db seed"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "turbo": "^2.4.0",
+    "typescript": "^5.7.0"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

@@ -1,0 +1,163 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  displayName  String
+  passwordHash String
+  avatarPath   String?
+  role         Role     @default(MEMBER)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // E2E encryption public keys (base64 encoded)
+  identityKey     String?
+  signedPreKey    String?
+  preKeySignature String?
+
+  memberships  RoomMember[]
+  sentMessages Message[]
+  senderKeys   SenderKeyDistribution[] @relation("ReceivedSenderKeys")
+  sessions     Session[]
+  readReceipts ReadReceipt[]
+
+  @@index([username])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  deviceInfo String?
+  ipAddress  String?
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Room {
+  id        String   @id @default(cuid())
+  name      String
+  type      RoomType @default(GROUP)
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members  RoomMember[]
+  messages Message[]
+
+  @@index([type])
+}
+
+model RoomMember {
+  id       String     @id @default(cuid())
+  roomId   String
+  room     Room       @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     MemberRole @default(MEMBER)
+  joinedAt DateTime   @default(now())
+
+  @@unique([roomId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id             String         @id @default(cuid())
+  roomId         String
+  room           Room           @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User           @relation(fields: [senderId], references: [id])
+  ciphertext     Bytes
+  nonce          Bytes
+  encryptionType EncryptionType
+  senderKeyId    String?
+  messageType    MessageType    @default(TEXT)
+  fileId         String?
+  isEdited       Boolean        @default(false)
+  isDeleted      Boolean        @default(false)
+  createdAt      DateTime       @default(now())
+
+  readReceipts   ReadReceipt[]
+
+  @@index([roomId, createdAt])
+  @@index([senderId])
+}
+
+model ReadReceipt {
+  id        String   @id @default(cuid())
+  messageId String
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readAt    DateTime @default(now())
+
+  @@unique([messageId, userId])
+  @@index([userId])
+}
+
+model SenderKeyDistribution {
+  id                 String   @id @default(cuid())
+  roomId             String
+  senderUserId       String
+  recipientUserId    String
+  recipient          User     @relation("ReceivedSenderKeys", fields: [recipientUserId], references: [id])
+  encryptedSenderKey Bytes
+  nonce              Bytes
+  keyId              String
+  createdAt          DateTime @default(now())
+
+  @@unique([roomId, senderUserId, recipientUserId, keyId])
+  @@index([recipientUserId, roomId])
+}
+
+model FileMetadata {
+  id          String   @id @default(cuid())
+  roomId      String
+  uploaderId  String
+  fileName    String
+  mimeType    String
+  size        Int
+  storagePath String
+  createdAt   DateTime @default(now())
+
+  @@index([roomId])
+}
+
+enum Role {
+  ADMIN
+  MEMBER
+}
+
+enum MemberRole {
+  ADMIN
+  MEMBER
+}
+
+enum RoomType {
+  DM
+  GROUP
+}
+
+enum EncryptionType {
+  PAIRWISE
+  SENDER_KEY
+}
+
+enum MessageType {
+  TEXT
+  FILE
+  IMAGE
+  SYSTEM
+}

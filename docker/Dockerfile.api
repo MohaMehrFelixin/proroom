@@ -1,0 +1,37 @@
+FROM node:20-alpine AS base
+RUN apk add --no-cache python3 make g++ linux-headers
+RUN corepack enable pnpm
+
+FROM base AS deps
+WORKDIR /app
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
+COPY apps/api/package.json apps/api/
+COPY packages/crypto/package.json packages/crypto/
+COPY packages/types/package.json packages/types/
+RUN pnpm install --frozen-lockfile || pnpm install
+
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
+COPY --from=deps /app/packages/crypto/node_modules ./packages/crypto/node_modules
+COPY --from=deps /app/packages/types/node_modules ./packages/types/node_modules
+COPY . .
+RUN cd packages/types && pnpm build
+RUN cd packages/crypto && pnpm build
+RUN cd apps/api && npx prisma generate && pnpm build
+
+FROM base AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=builder /app/apps/api/dist ./dist
+COPY --from=builder /app/apps/api/prisma ./prisma
+COPY --from=builder /app/apps/api/node_modules ./node_modules
+COPY --from=builder /app/node_modules/.pnpm ./node_modules/.pnpm
+COPY --from=builder /app/packages/crypto/dist ./node_modules/@proroom/crypto/dist
+COPY --from=builder /app/packages/crypto/package.json ./node_modules/@proroom/crypto/
+COPY --from=builder /app/packages/types/dist ./node_modules/@proroom/types/dist
+COPY --from=builder /app/packages/types/package.json ./node_modules/@proroom/types/
+
+EXPOSE 4000
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
