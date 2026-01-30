@@ -51,6 +51,7 @@ services:
       - PORT=4000
     ports:
       - "40000-40100:40000-40100/udp"
+      - "40000-40100:40000-40100/tcp"
     restart: unless-stopped
     depends_on:
       postgres:

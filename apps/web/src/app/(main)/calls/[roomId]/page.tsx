@@ -14,15 +14,15 @@ import { CallHeader } from '@/components/call/CallHeader';
 import { AddPeopleModal } from '@/components/call/AddPeopleModal';
 import { getChatSocket } from '@/lib/socket';
 import { Device, types as mediasoupTypes } from 'mediasoup-client';
+import type { Room } from '@proroom/types';
 
 type Transport = mediasoupTypes.Transport;
 type Producer = mediasoupTypes.Producer;
 type Consumer = mediasoupTypes.Consumer;
 
 interface RemoteStreamEntry {
-  id: string;
-  stream: MediaStream;
   userId: string;
+  stream: MediaStream;
   isScreen: boolean;
 }
 
@@ -193,13 +193,28 @@ const CallPage = () => {
       socket.emit('call:resume-consumer', { consumerId: consumer.id }, () => resolve());
     });
 
-    const stream = new MediaStream([consumer.track]);
     const isScreen = appData?.type === 'screen';
 
-    setRemoteStreams((prev) => [
-      ...prev,
-      { id: consumer.id, stream, userId, isScreen },
-    ]);
+    // Merge audio+video tracks from the same user into one MediaStream
+    // Screen shares always get their own entry
+    setRemoteStreams((prev) => {
+      if (isScreen) {
+        const stream = new MediaStream([consumer.track]);
+        return [...prev, { userId, stream, isScreen: true }];
+      }
+
+      const existingIdx = prev.findIndex((e) => e.userId === userId && !e.isScreen);
+      if (existingIdx >= 0) {
+        // Add this track to the existing stream
+        const updated = [...prev];
+        updated[existingIdx].stream.addTrack(consumer.track);
+        return updated;
+      }
+
+      // First track from this user — create new entry
+      const stream = new MediaStream([consumer.track]);
+      return [...prev, { userId, stream, isScreen: false }];
+    });
 
     if (isScreen) {
       setPinnedUser(null);
@@ -366,6 +381,22 @@ const CallPage = () => {
     }
   }, [roomId, setStatus, setActiveRoom, setLocalStream, setVideoEnabled, removeParticipant, setPinnedUser, router, reset]);
 
+  // Fetch call title from room data (for non-admin joiners who don't set it via modal)
+  const { setCallTitle } = useCallStore();
+  useEffect(() => {
+    const fetchCallTitle = async () => {
+      try {
+        const { data: roomData } = await api.get<Room>(`/rooms/${roomId}`);
+        if (roomData.callTitle && !useCallStore.getState().callTitle) {
+          setCallTitle(roomData.callTitle);
+        }
+      } catch {
+        // Not critical
+      }
+    };
+    fetchCallTitle();
+  }, [roomId, setCallTitle]);
+
   // Main lifecycle: join on mount, cleanup on unmount
   useEffect(() => {
     mountedRef.current = true;
@@ -397,15 +428,28 @@ const CallPage = () => {
     };
   }, [roomId, cleanup, router]);
 
-  // Resolve participant names from remote streams
+  // Resolve participant names from room members or API
   useEffect(() => {
     const userIds = [...new Set(remoteStreams.map((s) => s.userId))];
     for (const uid of userIds) {
       if (!participantNames[uid]) {
-        setParticipantName(uid, uid.slice(0, 8));
+        // Try room members first
+        const member = room?.members?.find((m) => m.userId === uid);
+        if (member?.user?.displayName) {
+          setParticipantName(uid, member.user.displayName);
+        } else {
+          // Fetch from API as fallback
+          api.get<{ displayName?: string; username?: string }>(`/users/${uid}`)
+            .then(({ data }) => {
+              setParticipantName(uid, data.displayName ?? data.username ?? uid.slice(0, 8));
+            })
+            .catch(() => {
+              setParticipantName(uid, uid.slice(0, 8));
+            });
+        }
       }
     }
-  }, [remoteStreams, participantNames, setParticipantName]);
+  }, [remoteStreams, participantNames, setParticipantName, room?.members]);
 
   const handleScreenShare = useCallback(async () => {
     if (isScreenSharing) {

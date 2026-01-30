@@ -4,9 +4,8 @@ import { cn } from '@/lib/cn';
 import { ParticipantTile } from './ParticipantTile';
 
 interface StreamEntry {
-  id: string;
-  stream: MediaStream;
   userId: string;
+  stream: MediaStream;
   isScreen: boolean;
 }
 
@@ -106,7 +105,7 @@ export const VideoGrid = ({
           />
           {thumbnailRemotes.map((entry) => (
             <ParticipantTile
-              key={entry.id}
+              key={`${entry.userId}-${entry.isScreen ? 'screen' : 'cam'}`}
               stream={entry.stream}
               name={participantNames[entry.userId] ?? entry.userId.slice(0, 8)}
               userId={entry.userId}
@@ -138,7 +137,7 @@ export const VideoGrid = ({
       />
       {cameraFeeds.map((entry) => (
         <ParticipantTile
-          key={entry.id}
+          key={`${entry.userId}-${entry.isScreen ? 'screen' : 'cam'}`}
           stream={entry.stream}
           name={participantNames[entry.userId] ?? entry.userId.slice(0, 8)}
           userId={entry.userId}
