@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
+import { randomBytes } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { AddMemberDto } from './dto/add-member.dto';
@@ -187,5 +188,71 @@ export class RoomsService {
       ciphertext: Buffer.from(m.ciphertext).toString('base64'),
       nonce: Buffer.from(m.nonce).toString('base64'),
     }));
+  }
+
+  async activateCall(roomId: string, userId: string, title?: string) {
+    const room = await this.prisma.room.findUnique({
+      where: { id: roomId },
+      include: { members: true },
+    });
+
+    if (!room) throw new NotFoundException('Room not found');
+
+    const member = room.members.find((m) => m.userId === userId);
+    if (!member || member.role !== 'ADMIN') {
+      throw new ForbiddenException('Only room admins can start calls');
+    }
+
+    const callHandle = randomBytes(6).toString('base64url');
+
+    const updated = await this.prisma.room.update({
+      where: { id: roomId },
+      data: {
+        callHandle,
+        callTitle: title || room.name,
+        isCallActive: true,
+        callStartedAt: new Date(),
+        callStartedBy: userId,
+      },
+    });
+
+    return {
+      callHandle: updated.callHandle,
+      callTitle: updated.callTitle,
+      isCallActive: updated.isCallActive,
+    };
+  }
+
+  async deactivateCall(roomId: string) {
+    await this.prisma.room.update({
+      where: { id: roomId },
+      data: {
+        isCallActive: false,
+        callHandle: null,
+        callTitle: null,
+        callStartedAt: null,
+        callStartedBy: null,
+      },
+    });
+  }
+
+  async resolveCallHandle(handle: string, userId: string) {
+    const room = await this.prisma.room.findUnique({
+      where: { callHandle: handle },
+      include: { members: true },
+    });
+
+    if (!room) throw new NotFoundException('Invalid call link');
+
+    const isMember = room.members.some((m) => m.userId === userId);
+    if (!isMember) {
+      throw new ForbiddenException('You are not a member of this room');
+    }
+
+    return {
+      roomId: room.id,
+      callTitle: room.callTitle,
+      isCallActive: room.isCallActive,
+    };
   }
 }

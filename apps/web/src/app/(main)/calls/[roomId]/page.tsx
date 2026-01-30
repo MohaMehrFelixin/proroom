@@ -6,10 +6,13 @@ import { getMediaSocket } from '@/lib/socket';
 import { useCallStore } from '@/stores/call';
 import { useAuthStore } from '@/stores/auth';
 import { useChatStore } from '@/stores/chat';
+import { api } from '@/lib/api';
 import { MemberRole } from '@proroom/types';
 import { VideoGrid } from '@/components/call/VideoGrid';
 import { CallControls } from '@/components/call/CallControls';
 import { CallHeader } from '@/components/call/CallHeader';
+import { AddPeopleModal } from '@/components/call/AddPeopleModal';
+import { getChatSocket } from '@/lib/socket';
 import { Device, types as mediasoupTypes } from 'mediasoup-client';
 
 type Transport = mediasoupTypes.Transport;
@@ -65,6 +68,7 @@ const CallPage = () => {
   const currentMember = room?.members?.find((m) => m.userId === user?.id);
   const isAdmin = currentMember?.role === MemberRole.ADMIN || room?.createdBy === user?.id;
   const [showEndConfirm, setShowEndConfirm] = useState(false);
+  const [showAddPeople, setShowAddPeople] = useState(false);
 
   const deviceRef = useRef<Device | null>(null);
   const sendTransportRef = useRef<Transport | null>(null);
@@ -206,13 +210,14 @@ const CallPage = () => {
     setActiveRoom(roomId);
 
     try {
-      // Try to get camera + audio, fall back to audio-only
+      // Respect lobby preferences for audio/video
+      const wantVideo = useCallStore.getState().isVideoEnabled;
       let stream: MediaStream;
-      let hasVideo = true;
+      let hasVideo = wantVideo;
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           audio: true,
-          video: true,
+          video: wantVideo,
         });
       } catch {
         try {
@@ -223,6 +228,11 @@ const CallPage = () => {
           router.push(`/chat/${roomId}`);
           return;
         }
+      }
+
+      // If audio was disabled in lobby, mute the audio tracks
+      if (!useCallStore.getState().isAudioEnabled) {
+        stream.getAudioTracks().forEach((t) => (t.enabled = false));
       }
 
       // Track this stream so cleanup can always find it
@@ -430,13 +440,19 @@ const CallPage = () => {
     setShowEndConfirm(true);
   }, []);
 
-  const confirmEndForAll = useCallback(() => {
+  const confirmEndForAll = useCallback(async () => {
     setShowEndConfirm(false);
     try {
       const socket = getMediaSocket();
       socket.emit('call:end-for-all', { roomId });
     } catch {
       // Socket not available
+    }
+    // Also deactivate via API as fallback
+    try {
+      await api.post(`/rooms/${roomId}/call/end`);
+    } catch {
+      // Already deactivated by gateway
     }
     cleanup();
     router.push(`/chat/${roomId}`);
@@ -446,14 +462,27 @@ const CallPage = () => {
   const localStream = useCallStore((s) => s.localStream);
   const screenStream = useCallStore((s) => s.screenStream);
 
+  const callTitle = useCallStore((s) => s.callTitle);
+  const activeUserIds = new Set([user?.id ?? '', ...remoteStreams.map((s) => s.userId)]);
+
+  const handleInviteUser = useCallback((userId: string) => {
+    try {
+      const socket = getChatSocket();
+      socket.emit('call:invite', { roomId, userId, type: 'video' });
+    } catch {
+      // Socket not ready
+    }
+  }, [roomId]);
+
   return (
     <div className="flex h-full flex-col bg-tg-bg-dark">
       <CallHeader
-        roomName={roomId}
+        roomName={callTitle || room?.name || roomId}
         participantCount={participantCount}
         isAdmin={isAdmin}
         onBack={handleLeaveCall}
         onEndForAll={handleEndForAll}
+        onAddPeople={() => setShowAddPeople(true)}
       />
 
       <div className="min-h-0 flex-1">
@@ -481,6 +510,17 @@ const CallPage = () => {
         onToggleScreenShare={handleScreenShare}
         onLeave={handleLeaveCall}
       />
+
+      {/* Add people modal */}
+      {room && (
+        <AddPeopleModal
+          open={showAddPeople}
+          onClose={() => setShowAddPeople(false)}
+          members={room.members ?? []}
+          activeUserIds={activeUserIds}
+          onInvite={handleInviteUser}
+        />
+      )}
 
       {/* End call confirmation dialog */}
       {showEndConfirm && (

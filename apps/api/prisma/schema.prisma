@@ -54,6 +54,12 @@ model Room {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  callHandle    String?   @unique
+  callTitle     String?
+  isCallActive  Boolean   @default(false)
+  callStartedAt DateTime?
+  callStartedBy String?
+
   members  RoomMember[]
   messages Message[]
 

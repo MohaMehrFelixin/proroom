@@ -29,6 +29,14 @@ export class RoomsController {
     return this.roomsService.findByUser(req.user.id);
   }
 
+  @Get('call/:handle')
+  async resolveCallHandle(
+    @Param('handle') handle: string,
+    @Request() req: { user: { id: string } },
+  ) {
+    return this.roomsService.resolveCallHandle(handle, req.user.id);
+  }
+
   @Get(':id')
   async findById(
     @Param('id') id: string,
@@ -69,4 +77,25 @@ export class RoomsController {
   ) {
     return this.roomsService.removeMember(roomId, userId, req.user.id);
   }
+
+  @Post(':id/call')
+  async activateCall(
+    @Param('id') roomId: string,
+    @Body() body: { title?: string },
+    @Request() req: { user: { id: string } },
+  ) {
+    return this.roomsService.activateCall(roomId, req.user.id, body.title);
+  }
+
+  @Post(':id/call/end')
+  async deactivateCall(
+    @Param('id') roomId: string,
+    @Request() req: { user: { id: string } },
+  ) {
+    // Verify membership before deactivating
+    await this.roomsService.findById(roomId, req.user.id);
+    await this.roomsService.deactivateCall(roomId);
+    return { success: true };
+  }
+
 }

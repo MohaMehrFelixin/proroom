@@ -164,7 +164,7 @@ export const Sidebar = () => {
         <div className="relative px-3 pb-4">
           <button
             onClick={() => setCreateOpen(true)}
-            className="absolute bottom-6 right-5 flex h-14 w-14 items-center justify-center rounded-full bg-tg-accent shadow-lg transition-transform hover:scale-105 active:scale-95"
+            className="absolute bottom-6 right-5 flex h-12 w-12 items-center justify-center rounded-full bg-tg-accent shadow-lg transition-transform hover:scale-105 active:scale-95 sm:h-14 sm:w-14"
           >
             <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />

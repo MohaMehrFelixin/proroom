@@ -9,6 +9,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { Server, Socket } from 'socket.io';
 import { MediaService } from './media.service';
+import { RoomsService } from '../rooms/rooms.service';
 import type { RtpCapabilities } from 'mediasoup/node/lib/types';
 
 interface AuthenticatedSocket extends Socket {
@@ -31,6 +32,7 @@ export class MediaGateway implements OnGatewayDisconnect {
   constructor(
     private readonly mediaService: MediaService,
     private readonly jwtService: JwtService,
+    private readonly roomsService: RoomsService,
   ) {}
 
   async handleConnection(client: AuthenticatedSocket) {
@@ -229,31 +231,6 @@ export class MediaGateway implements OnGatewayDisconnect {
     });
   }
 
-  @SubscribeMessage('call:initiate')
-  handleInitiateCall(
-    @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: { roomId: string; type: 'audio' | 'video' },
-  ) {
-    // Broadcast to room members that a call is starting
-    client.to(`room:${data.roomId}`).emit('call:incoming', {
-      roomId: data.roomId,
-      callerId: client.userId,
-      callerName: client.userId,
-      type: data.type,
-    });
-  }
-
-  @SubscribeMessage('call:reject')
-  handleRejectCall(
-    @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: { roomId: string },
-  ) {
-    // Notify the room that this user rejected the call
-    client.to(`call:${data.roomId}`).emit('call:ended', {
-      roomId: data.roomId,
-    });
-  }
-
   @SubscribeMessage('call:end-for-all')
   async handleEndForAll(
     @ConnectedSocket() client: AuthenticatedSocket,
@@ -266,5 +243,12 @@ export class MediaGateway implements OnGatewayDisconnect {
 
     // Clean up the media room
     await this.mediaService.closeRoom(roomId);
+
+    // Deactivate call in DB
+    try {
+      await this.roomsService.deactivateCall(roomId);
+    } catch {
+      // Room may not exist or call already deactivated
+    }
   }
 }

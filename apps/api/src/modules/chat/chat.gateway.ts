@@ -223,6 +223,44 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     });
   }
 
+  @SubscribeMessage('call:initiate')
+  handleInitiateCall(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() data: { roomId: string; type: 'audio' | 'video' },
+  ) {
+    // Broadcast to room members (who are already in `room:<roomId>` on this namespace)
+    client.to(`room:${data.roomId}`).emit('call:incoming', {
+      roomId: data.roomId,
+      callerId: client.userId,
+      callerName: client.userId,
+      type: data.type,
+    });
+  }
+
+  @SubscribeMessage('call:reject')
+  handleRejectCall(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() data: { roomId: string },
+  ) {
+    client.to(`room:${data.roomId}`).emit('call:ended', {
+      roomId: data.roomId,
+    });
+  }
+
+  @SubscribeMessage('call:invite')
+  handleCallInvite(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() data: { roomId: string; userId: string; type: 'audio' | 'video' },
+  ) {
+    // Send incoming call notification directly to the invited user
+    this.server.to(`user:${data.userId}`).emit('call:incoming', {
+      roomId: data.roomId,
+      callerId: client.userId,
+      callerName: client.userId,
+      type: data.type,
+    });
+  }
+
   @SubscribeMessage('senderkey:distribute')
   async handleSenderKeyDistribution(
     @ConnectedSocket() client: AuthenticatedSocket,

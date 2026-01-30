@@ -1,11 +1,13 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Avatar } from '@/components/ui/Avatar';
 import { getAvatarUrl } from '@/lib/avatar';
 import { useAuthStore } from '@/stores/auth';
 import { useChatStore } from '@/stores/chat';
-import { getMediaSocket } from '@/lib/socket';
+import { StartCallModal } from '@/components/call/StartCallModal';
+import { MemberRole } from '@proroom/types';
 import type { Room } from '@proroom/types';
 
 interface ChatHeaderProps {
@@ -18,6 +20,7 @@ export const ChatHeader = ({ room, onInfoClick }: ChatHeaderProps) => {
   const currentUser = useAuthStore((s) => s.user);
   const onlineUsers = useChatStore((s) => s.onlineUsers);
   const typingUsers = useChatStore((s) => s.typingUsers[room.id]);
+  const [showCallModal, setShowCallModal] = useState(false);
 
   const isDM = room.type === 'DM';
   const otherMember = isDM
@@ -49,14 +52,20 @@ export const ChatHeader = ({ room, onInfoClick }: ChatHeaderProps) => {
     return `${memberCount} members${onlineCount > 0 ? `, ${onlineCount} online` : ''}`;
   };
 
-  const handleCall = (type: 'audio' | 'video') => {
-    const socket = getMediaSocket();
-    socket.emit('call:initiate', { roomId: room.id, type });
-    router.push(`/calls/${room.id}`);
+  const currentMember = room.members?.find((m) => m.userId === currentUser?.id);
+  const isAdmin = currentMember?.role === MemberRole.ADMIN || room.createdBy === currentUser?.id;
+
+  const handleCall = () => {
+    if (isAdmin) {
+      setShowCallModal(true);
+    } else {
+      // Non-admins go directly to lobby if call is active
+      router.push(`/calls/${room.id}/lobby`);
+    }
   };
 
   return (
-    <div className="flex items-center justify-between border-b border-tg-border bg-tg-bg-secondary px-4 py-2.5">
+    <div className="flex items-center justify-between border-b border-tg-border bg-tg-bg-secondary px-2 py-2.5 sm:px-4">
       {/* Back button for mobile */}
       <button
         onClick={() => router.push('/chat')}
@@ -77,7 +86,7 @@ export const ChatHeader = ({ room, onInfoClick }: ChatHeaderProps) => {
 
       <div className="flex items-center gap-1">
         <button
-          onClick={() => handleCall('audio')}
+          onClick={handleCall}
           className="rounded-lg p-2 text-tg-text-secondary hover:bg-tg-bg-input hover:text-tg-text"
           title="Voice call"
         >
@@ -86,7 +95,7 @@ export const ChatHeader = ({ room, onInfoClick }: ChatHeaderProps) => {
           </svg>
         </button>
         <button
-          onClick={() => handleCall('video')}
+          onClick={handleCall}
           className="rounded-lg p-2 text-tg-text-secondary hover:bg-tg-bg-input hover:text-tg-text"
           title="Video call"
         >
@@ -104,6 +113,12 @@ export const ChatHeader = ({ room, onInfoClick }: ChatHeaderProps) => {
           </svg>
         </button>
       </div>
+
+      <StartCallModal
+        open={showCallModal}
+        onClose={() => setShowCallModal(false)}
+        room={room}
+      />
     </div>
   );
 };

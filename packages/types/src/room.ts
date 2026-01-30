@@ -15,6 +15,11 @@ export interface Room {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  callHandle?: string | null;
+  callTitle?: string | null;
+  isCallActive?: boolean;
+  callStartedAt?: string | null;
+  callStartedBy?: string | null;
   members?: RoomMember[];
 }
 

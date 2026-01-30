@@ -21,12 +21,12 @@ export const CallControls = ({
   onToggleScreenShare,
   onLeave,
 }: CallControlsProps) => (
-  <div className="flex items-center justify-center gap-3 bg-tg-bg-secondary/80 px-4 py-3 backdrop-blur-sm">
+  <div className="flex items-center justify-center gap-2 bg-tg-bg-secondary/80 px-4 py-3 backdrop-blur-sm sm:gap-3">
     {/* Mic */}
     <button
       onClick={onToggleAudio}
       className={cn(
-        'flex h-12 w-12 items-center justify-center rounded-full transition-colors',
+        'flex h-10 w-10 items-center justify-center rounded-full transition-colors sm:h-12 sm:w-12',
         isAudioEnabled
           ? 'bg-tg-bg-input text-tg-text hover:bg-tg-border'
           : 'bg-red-500 text-white hover:bg-red-600',
@@ -49,7 +49,7 @@ export const CallControls = ({
     <button
       onClick={onToggleVideo}
       className={cn(
-        'flex h-12 w-12 items-center justify-center rounded-full transition-colors',
+        'flex h-10 w-10 items-center justify-center rounded-full transition-colors sm:h-12 sm:w-12',
         isVideoEnabled
           ? 'bg-tg-bg-input text-tg-text hover:bg-tg-border'
           : 'bg-red-500 text-white hover:bg-red-600',
@@ -72,7 +72,7 @@ export const CallControls = ({
     <button
       onClick={onToggleScreenShare}
       className={cn(
-        'flex h-12 w-12 items-center justify-center rounded-full transition-colors',
+        'flex h-10 w-10 items-center justify-center rounded-full transition-colors sm:h-12 sm:w-12',
         isScreenSharing
           ? 'bg-tg-accent text-white hover:bg-tg-accent/80'
           : 'bg-tg-bg-input text-tg-text hover:bg-tg-border',
@@ -87,7 +87,7 @@ export const CallControls = ({
     {/* Leave */}
     <button
       onClick={onLeave}
-      className="flex h-12 w-14 items-center justify-center rounded-full bg-red-500 text-white transition-colors hover:bg-red-600"
+      className="flex h-10 w-12 items-center justify-center rounded-full bg-red-500 text-white transition-colors hover:bg-red-600 sm:h-12 sm:w-14"
       title="Leave call"
     >
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>

@@ -53,7 +53,7 @@ export const MessageBubble = ({
         isOwn ? 'justify-end' : 'justify-start',
       )}
     >
-      <div className="relative max-w-[65%]">
+      <div className="relative max-w-[85%] sm:max-w-[75%] md:max-w-[65%]">
         {showSenderName && !isOwn && (
           <div className="mb-0.5 pl-3 text-xs font-semibold text-tg-accent">
             {senderName}

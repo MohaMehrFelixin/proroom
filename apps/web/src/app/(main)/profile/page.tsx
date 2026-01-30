@@ -117,8 +117,8 @@ const ProfilePage = () => {
   };
 
   return (
-    <div className="flex h-full items-start justify-center overflow-y-auto p-6">
-      <div className="w-full max-w-md rounded-xl bg-tg-bg-secondary p-6">
+    <div className="flex h-full items-start justify-center overflow-y-auto p-3 sm:p-6">
+      <div className="w-full max-w-md rounded-xl bg-tg-bg-secondary p-4 sm:p-6">
         <h1 className="mb-6 text-xl font-bold text-white">Profile Settings</h1>
 
         {message && (

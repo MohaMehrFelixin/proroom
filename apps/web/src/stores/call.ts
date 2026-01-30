@@ -15,6 +15,8 @@ interface CallState {
   pinnedUserId: string | null;
   participantNames: Record<string, string>;
   callDuration: number;
+  callTitle: string | null;
+  callHandle: string | null;
 
   setStatus: (status: CallStatus) => void;
   setActiveRoom: (roomId: string | null) => void;
@@ -30,6 +32,8 @@ interface CallState {
   setPinnedUser: (userId: string | null) => void;
   setParticipantName: (userId: string, name: string) => void;
   setCallDuration: (duration: number) => void;
+  setCallTitle: (title: string | null) => void;
+  setCallHandle: (handle: string | null) => void;
   reset: () => void;
 }
 
@@ -45,6 +49,8 @@ export const useCallStore = create<CallState>((set) => ({
   pinnedUserId: null,
   participantNames: {},
   callDuration: 0,
+  callTitle: null,
+  callHandle: null,
 
   setStatus: (status) => set({ status }),
   setActiveRoom: (roomId) => set({ activeRoomId: roomId }),
@@ -78,6 +84,8 @@ export const useCallStore = create<CallState>((set) => ({
     })),
 
   setCallDuration: (duration) => set({ callDuration: duration }),
+  setCallTitle: (title) => set({ callTitle: title }),
+  setCallHandle: (handle) => set({ callHandle: handle }),
 
   reset: () =>
     set({
@@ -92,5 +100,7 @@ export const useCallStore = create<CallState>((set) => ({
       pinnedUserId: null,
       participantNames: {},
       callDuration: 0,
+      callTitle: null,
+      callHandle: null,
     }),
 }));

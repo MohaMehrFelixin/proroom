@@ -70,6 +70,7 @@ export interface ClientToServerEvents {
   }) => void;
   'call:accept': (payload: { roomId: string }) => void;
   'call:reject': (payload: { roomId: string }) => void;
+  'call:invite': (payload: { roomId: string; userId: string; type: CallType }) => void;
   'call:join-room': (
     roomId: string,
     callback: (response: { rtpCapabilities: RtpCapabilities }) => void,

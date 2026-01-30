@@ -99,7 +99,7 @@ export const getPairwiseSession = async (
 
   const myKeys = await getOrCreateDeviceKeys();
   const session = establishPairwiseSession(
-    myKeys.identityKey.privateKey,
+    myKeys.signedPreKey.keyPair.privateKey,
     theirPreKey,
     roomId,
   );

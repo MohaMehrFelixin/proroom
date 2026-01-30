@@ -5,9 +5,11 @@ import { MediaGateway } from './media.gateway';
 import { MediaService } from './media.service';
 import { TurnService } from './turn.service';
 import { TurnController } from './turn.controller';
+import { RoomsModule } from '../rooms/rooms.module';
 
 @Module({
   imports: [
+    RoomsModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

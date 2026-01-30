@@ -20,7 +20,13 @@ export const RoomInfoPanel = ({ room, open, onClose }: RoomInfoPanelProps) => {
   const members = room.members ?? [];
 
   return (
-    <div className="flex h-full w-80 shrink-0 flex-col border-l border-tg-border bg-tg-bg-secondary">
+    <>
+      {/* Mobile/tablet backdrop */}
+      <div
+        className="fixed inset-0 z-40 bg-black/50 md:hidden"
+        onClick={onClose}
+      />
+    <div className="fixed inset-0 z-50 flex flex-col bg-tg-bg-secondary sm:inset-auto sm:fixed sm:right-0 sm:top-0 sm:h-full sm:w-80 md:relative md:z-auto md:flex md:h-full md:w-80 md:shrink-0 md:border-l md:border-tg-border">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-tg-border px-4 py-3">
         <h3 className="text-sm font-semibold text-tg-text">
@@ -80,5 +86,6 @@ export const RoomInfoPanel = ({ room, open, onClose }: RoomInfoPanelProps) => {
         })}
       </div>
     </div>
+    </>
   );
 };

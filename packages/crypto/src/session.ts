@@ -7,8 +7,6 @@ import {
   decryptToString,
   type EncryptedPayload,
 } from './aes-gcm';
-import { edwardsToMontgomeryPriv } from '@noble/curves/ed25519';
-
 export interface PairwiseSession {
   sharedSecret: Uint8Array;
   messageKey: Uint8Array;
@@ -16,18 +14,16 @@ export interface PairwiseSession {
 
 /**
  * Establish a pairwise session between two users for DM encryption.
- * Uses X25519 ECDH with the other user's signed pre-key.
- *
- * The Ed25519 identity private key is converted to X25519 for ECDH.
+ * Uses X25519 ECDH: both sides compute X25519(myPreKeyPriv, theirPreKeyPub)
+ * which is commutative, ensuring both derive the same shared secret.
  */
 export const establishPairwiseSession = (
-  myIdentityPrivateKey: Uint8Array,
+  mySignedPreKeyPrivate: Uint8Array,
   theirSignedPreKeyPublic: Uint8Array,
   roomId: string,
 ): PairwiseSession => {
-  const myX25519Private = edwardsToMontgomeryPriv(myIdentityPrivateKey);
   const sharedSecret = computeSharedSecret(
-    myX25519Private,
+    mySignedPreKeyPrivate,
     theirSignedPreKeyPublic,
   );
   const messageKey = deriveKey(sharedSecret, roomId, 'proroom-dm');

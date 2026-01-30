@@ -27,14 +27,14 @@ export const Modal = ({ open, onClose, title, children, className }: ModalProps)
   return (
     <div
       ref={backdropRef}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4"
       onClick={(e) => {
         if (e.target === backdropRef.current) onClose();
       }}
     >
       <div
         className={cn(
-          'w-full max-w-md rounded-xl bg-tg-bg-secondary shadow-2xl',
+          'w-full max-w-md rounded-t-xl bg-tg-bg-secondary shadow-2xl sm:rounded-xl',
           className,
         )}
       >

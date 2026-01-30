@@ -92,7 +92,7 @@ export const VideoGrid = ({
         </div>
 
         {/* Thumbnail strip */}
-        <div className="flex h-24 gap-2 overflow-x-auto">
+        <div className="flex h-16 gap-2 overflow-x-auto sm:h-24">
           {/* Local camera thumbnail */}
           <ParticipantTile
             stream={localStream}
@@ -152,7 +152,7 @@ export const VideoGrid = ({
 
 const getGridClass = (count: number): string => {
   if (count === 1) return 'grid-cols-1 grid-rows-1';
-  if (count === 2) return 'grid-cols-2 grid-rows-1';
-  if (count <= 4) return 'grid-cols-2 grid-rows-2';
-  return 'grid-cols-3 grid-rows-2';
+  if (count === 2) return 'grid-cols-1 sm:grid-cols-2 grid-rows-2 sm:grid-rows-1';
+  if (count <= 4) return 'grid-cols-1 sm:grid-cols-2 grid-rows-4 sm:grid-rows-2';
+  return 'grid-cols-2 sm:grid-cols-3 grid-rows-3 sm:grid-rows-2';
 };
