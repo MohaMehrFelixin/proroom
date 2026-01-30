@@ -80,25 +80,29 @@ model RoomMember {
 }
 
 model Message {
-  id             String         @id @default(cuid())
-  roomId         String
-  room           Room           @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  senderId       String
-  sender         User           @relation(fields: [senderId], references: [id])
-  ciphertext     Bytes
-  nonce          Bytes
-  encryptionType EncryptionType
-  senderKeyId    String?
-  messageType    MessageType    @default(TEXT)
-  fileId         String?
-  isEdited       Boolean        @default(false)
-  isDeleted      Boolean        @default(false)
-  createdAt      DateTime       @default(now())
+  id              String         @id @default(cuid())
+  roomId          String
+  room            Room           @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  senderId        String
+  sender          User           @relation(fields: [senderId], references: [id])
+  ciphertext      Bytes
+  nonce           Bytes
+  encryptionType  EncryptionType
+  senderKeyId     String?
+  messageType     MessageType    @default(TEXT)
+  fileId          String?
+  isEdited        Boolean        @default(false)
+  isDeleted       Boolean        @default(false)
+  createdAt       DateTime       @default(now())
+  recipientUserId String?
+  groupMessageId  String?
 
   readReceipts   ReadReceipt[]
 
   @@index([roomId, createdAt])
   @@index([senderId])
+  @@index([roomId, recipientUserId, createdAt])
+  @@index([groupMessageId])
 }
 
 model ReadReceipt {

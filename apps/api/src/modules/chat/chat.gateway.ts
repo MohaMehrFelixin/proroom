@@ -119,23 +119,33 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
 
-    const message = await this.chatService.saveMessage(
+    const result = await this.chatService.saveMessage(
       client.userId,
       payload,
     );
 
-    // Broadcast to all room members
-    this.server.to(`room:${payload.roomId}`).emit('message:new', message);
+    // Per-recipient group messages: send each member their own copy
+    if (Array.isArray(result)) {
+      for (const msg of result) {
+        const recipientId = (msg as unknown as { recipientUserId?: string }).recipientUserId;
+        if (recipientId) {
+          this.server.to(`user:${recipientId}`).emit('message:new', msg);
+        }
+      }
+      // Use first message's ID for acknowledgment
+      return { messageId: result[0]?.id ?? '' };
+    }
 
-    // Also notify offline members via their personal rooms
+    // DM: broadcast to room + personal rooms
+    this.server.to(`room:${payload.roomId}`).emit('message:new', result);
     const memberIds = await this.chatService.getRoomMemberIds(payload.roomId);
     for (const memberId of memberIds) {
       if (memberId !== client.userId) {
-        this.server.to(`user:${memberId}`).emit('message:new', message);
+        this.server.to(`user:${memberId}`).emit('message:new', result);
       }
     }
 
-    return { messageId: message.id };
+    return { messageId: result.id };
   }
 
   @SubscribeMessage('typing:start')

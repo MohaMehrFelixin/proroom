@@ -25,14 +25,21 @@ export interface EncryptedMessage {
   createdAt: string;
 }
 
+export interface RecipientCopy {
+  recipientUserId: string;
+  ciphertext: string; // base64
+  nonce: string; // base64
+}
+
 export interface SendMessagePayload {
   roomId: string;
-  ciphertext: string; // base64
+  ciphertext: string; // base64 — used for DM (single recipient)
   nonce: string; // base64
   encryptionType: EncryptionType;
   senderKeyId?: string;
   messageType: MessageType;
   fileId?: string;
+  recipientCopies?: RecipientCopy[]; // for group PAIRWISE — per-recipient encrypted copies
 }
 
 export interface DecryptedMessage {

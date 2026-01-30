@@ -163,7 +163,15 @@ export class RoomsService {
     }
 
     const messages = await this.prisma.message.findMany({
-      where: { roomId },
+      where: {
+        roomId,
+        // For per-recipient encrypted messages, only return copies for this user.
+        // Messages without recipientUserId (DMs, legacy) are always returned.
+        OR: [
+          { recipientUserId: null },
+          { recipientUserId: userId },
+        ],
+      },
       orderBy: { createdAt: 'desc' },
       take: limit,
       ...(cursor
@@ -180,6 +188,7 @@ export class RoomsService {
         messageType: true,
         fileId: true,
         createdAt: true,
+        groupMessageId: true,
       },
     });
 

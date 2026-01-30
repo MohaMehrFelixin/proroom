@@ -6,7 +6,53 @@ import type { SendMessagePayload, EncryptedSenderKeyPayload, EncryptedMessage } 
 export class ChatService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async saveMessage(senderId: string, payload: SendMessagePayload): Promise<EncryptedMessage> {
+  async saveMessage(senderId: string, payload: SendMessagePayload): Promise<EncryptedMessage | EncryptedMessage[]> {
+    // Update room's updatedAt
+    await this.prisma.room.update({
+      where: { id: payload.roomId },
+      data: { updatedAt: new Date() },
+    });
+
+    // Group PAIRWISE: save one row per recipient
+    if (payload.recipientCopies && payload.recipientCopies.length > 0) {
+      const groupMessageId = `grp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const now = new Date();
+
+      const messages = await this.prisma.$transaction(
+        payload.recipientCopies.map((copy) =>
+          this.prisma.message.create({
+            data: {
+              roomId: payload.roomId,
+              senderId,
+              ciphertext: Buffer.from(copy.ciphertext, 'base64'),
+              nonce: Buffer.from(copy.nonce, 'base64'),
+              encryptionType: payload.encryptionType,
+              messageType: payload.messageType,
+              fileId: payload.fileId,
+              recipientUserId: copy.recipientUserId,
+              groupMessageId,
+              createdAt: now,
+            },
+          }),
+        ),
+      );
+
+      return messages.map((m, i) => ({
+        id: m.id,
+        roomId: m.roomId,
+        senderId: m.senderId,
+        ciphertext: payload.recipientCopies![i].ciphertext,
+        nonce: payload.recipientCopies![i].nonce,
+        encryptionType: m.encryptionType as unknown as EncryptedMessage['encryptionType'],
+        messageType: m.messageType as unknown as EncryptedMessage['messageType'],
+        fileId: m.fileId ?? undefined,
+        createdAt: m.createdAt.toISOString(),
+        recipientUserId: m.recipientUserId ?? undefined,
+        groupMessageId: m.groupMessageId ?? undefined,
+      })) as EncryptedMessage[];
+    }
+
+    // DM or legacy: single message row
     const message = await this.prisma.message.create({
       data: {
         roomId: payload.roomId,
@@ -18,12 +64,6 @@ export class ChatService {
         messageType: payload.messageType,
         fileId: payload.fileId,
       },
-    });
-
-    // Update room's updatedAt
-    await this.prisma.room.update({
-      where: { id: payload.roomId },
-      data: { updatedAt: new Date() },
     });
 
     return {

@@ -10,11 +10,6 @@ import {
   getPairwiseSession,
   encryptDMMessage,
   decryptDMMessage,
-  encryptGroupMessage,
-  decryptGroupMessage,
-  distributeSenderKey,
-  receiveSenderKey,
-  distributeSenderKeyToAll,
 } from '@/lib/crypto';
 import { getCachedMessages, setCachedMessages, appendCachedMessage, updateCachedMessage } from '@/lib/message-cache';
 import { ChatHeader } from '@/components/chat/ChatHeader';
@@ -88,39 +83,25 @@ const ChatRoomPage = () => {
           }
         }
 
-        let needsSenderKeyResync = false;
         const decrypted = await Promise.all(
           encryptedMessages.reverse().map((msg) => {
-            // Use cached plaintext if available
             const cachedMsg = cachedMap.get(msg.id);
             if (cachedMsg) return Promise.resolve(cachedMsg);
 
-            return decryptEncryptedMessage(msg, keyMap, roomData).catch(() => {
-              if (msg.encryptionType === 'SENDER_KEY') needsSenderKeyResync = true;
-              return {
-                id: msg.id,
-                roomId: msg.roomId,
-                senderId: msg.senderId,
-                content: '[Unable to decrypt]',
-                messageType: msg.messageType,
-                fileId: msg.fileId,
-                createdAt: msg.createdAt,
-              };
-            });
+            return decryptEncryptedMessage(msg, keyMap, roomData).catch(() => ({
+              id: msg.id,
+              roomId: msg.roomId,
+              senderId: msg.senderId,
+              content: '[Unable to decrypt]',
+              messageType: msg.messageType,
+              fileId: msg.fileId,
+              createdAt: msg.createdAt,
+            }));
           }),
         );
 
         setMessages(roomId, decrypted);
         await setCachedMessages(currentUser?.id ?? '', roomId, decrypted);
-
-        if (needsSenderKeyResync) {
-          try {
-            const socket = getChatSocket();
-            socket.emit('senderkey:request', { roomId, requesterId: currentUser?.id ?? '' });
-          } catch {
-            // Socket not ready
-          }
-        }
       } catch (err) {
         console.error('[ChatRoom] init failed:', err);
       }
@@ -137,36 +118,39 @@ const ChatRoomPage = () => {
       const keys$ = keysOverride ?? memberKeys;
       const room$ = roomOverride ?? room;
 
-      if (msg.encryptionType === 'PAIRWISE') {
-        const otherUserId =
-          msg.senderId === currentUser?.id
-            ? room$?.members?.find((m) => m.userId !== currentUser?.id)?.userId ?? msg.senderId
-            : msg.senderId;
+      // All messages use pairwise encryption (DM and group).
+      // For DMs: the other user is the only other member.
+      // For groups: each message is encrypted per-recipient with
+      //   pairwise session between sender and recipient.
+      //   When decrypting, use pairwise session with the sender.
+      //   For own messages, use pairwise with self (self-key).
+      const isDM = room$?.type === 'DM';
+      let otherUserId: string;
 
-        const keys = keys$.get(otherUserId);
-        if (!keys) throw new Error('Keys not found');
-
-        const session = await getPairwiseSession(
-          otherUserId,
-          keys.identityKey,
-          keys.signedPreKey,
-          keys.preKeySignature,
-          roomId,
-        );
-
-        const content = decryptDMMessage(session, msg.ciphertext, msg.nonce);
-        return {
-          id: msg.id,
-          roomId: msg.roomId,
-          senderId: msg.senderId,
-          content,
-          messageType: msg.messageType,
-          fileId: msg.fileId,
-          createdAt: msg.createdAt,
-        };
+      if (msg.senderId === currentUser?.id) {
+        // Own message: in DM, use the other member. In group, use self-key.
+        if (isDM) {
+          otherUserId = room$?.members?.find((m) => m.userId !== currentUser?.id)?.userId ?? msg.senderId;
+        } else {
+          // Group own messages are encrypted with self pairwise session
+          otherUserId = currentUser.id;
+        }
+      } else {
+        otherUserId = msg.senderId;
       }
 
-      const content = await decryptGroupMessage(msg.senderId, roomId, msg.ciphertext, msg.nonce);
+      const keys = keys$.get(otherUserId);
+      if (!keys) throw new Error('Keys not found');
+
+      const session = await getPairwiseSession(
+        otherUserId,
+        keys.identityKey,
+        keys.signedPreKey,
+        keys.preKeySignature,
+        roomId,
+      );
+
+      const content = decryptDMMessage(session, msg.ciphertext, msg.nonce);
       return {
         id: msg.id,
         roomId: msg.roomId,
@@ -192,14 +176,6 @@ const ChatRoomPage = () => {
         addMessage(roomId, decrypted);
         await appendCachedMessage(currentUser?.id ?? '', roomId, decrypted);
       } catch {
-        // If group message decryption fails, request sender key resync
-        if (msg.encryptionType === 'SENDER_KEY' && currentUser) {
-          try {
-            socket.emit('senderkey:request', { roomId, requesterId: currentUser.id });
-          } catch {
-            // Socket not ready
-          }
-        }
         const fallback = {
           id: msg.id,
           roomId: msg.roomId,
@@ -232,75 +208,13 @@ const ChatRoomPage = () => {
     socket.on('message:edited', handleEdited);
     socket.on('message:deleted', handleDeleted);
 
-    const handleSenderKeyRequest = async (data: { roomId: string; requesterId: string }) => {
-      if (data.roomId !== roomId || !currentUser) return;
-      const requesterKeys = memberKeys.get(data.requesterId);
-      if (!requesterKeys) return;
-      try {
-        const session = await getPairwiseSession(
-          data.requesterId,
-          requesterKeys.identityKey,
-          requesterKeys.signedPreKey,
-          requesterKeys.preKeySignature,
-          roomId,
-        );
-        const distributed = await distributeSenderKey(roomId, session);
-        socket.emit('senderkey:distribute', {
-          roomId,
-          senderUserId: currentUser.id,
-          recipientUserId: data.requesterId,
-          encryptedSenderKey: distributed.encryptedSenderKey,
-          nonce: distributed.nonce,
-          keyId: distributed.keyId,
-        });
-      } catch {
-        // Failed to distribute
-      }
-    };
-    socket.on('senderkey:request' as Parameters<typeof socket.on>[0], handleSenderKeyRequest);
-
-    // Listen for incoming sender key distributions
-    const handleSenderKeyDistribute = async (data: {
-      roomId: string;
-      senderUserId: string;
-      recipientUserId: string;
-      encryptedSenderKey: string;
-      nonce: string;
-      keyId: string;
-    }) => {
-      if (data.roomId !== roomId || data.recipientUserId !== currentUser?.id) return;
-      const senderKeys = memberKeys.get(data.senderUserId);
-      if (!senderKeys) return;
-      try {
-        const session = await getPairwiseSession(
-          data.senderUserId,
-          senderKeys.identityKey,
-          senderKeys.signedPreKey,
-          senderKeys.preKeySignature,
-          roomId,
-        );
-        await receiveSenderKey(
-          data.senderUserId,
-          roomId,
-          session,
-          data.encryptedSenderKey,
-          data.nonce,
-        );
-      } catch {
-        // Failed to receive sender key
-      }
-    };
-    socket.on('senderkey:distribute' as Parameters<typeof socket.on>[0], handleSenderKeyDistribute);
-
     return () => {
       socket.off('message:new', handleNewMessage);
       socket.off('message:edited', handleEdited);
       socket.off('message:deleted', handleDeleted);
-      socket.off('senderkey:request' as Parameters<typeof socket.off>[0], handleSenderKeyRequest);
-      socket.off('senderkey:distribute' as Parameters<typeof socket.off>[0], handleSenderKeyDistribute);
       socket.emit('room:leave', roomId);
     };
-  }, [roomId, addMessage, editMessage, deleteMessage, decryptEncryptedMessage, currentUser, memberKeys]);
+  }, [roomId, addMessage, editMessage, deleteMessage, decryptEncryptedMessage, currentUser]);
 
   // Auto-scroll and read receipt
   useEffect(() => {
@@ -337,10 +251,10 @@ const ChatRoomPage = () => {
     try {
       const socket = getChatSocket();
       const isDM = room?.type === 'DM';
-      let encryptionType: EncryptionType;
+      const encryptionType = EncryptionType.PAIRWISE;
       let ciphertext: string;
       let nonce: string;
-      let senderKeyId: string | undefined;
+      let recipientCopies: Array<{ recipientUserId: string; ciphertext: string; nonce: string }> | undefined;
 
       if (isDM) {
         const otherMember = room?.members?.find((m) => m.userId !== currentUser.id);
@@ -357,15 +271,34 @@ const ChatRoomPage = () => {
         const encrypted = await encryptDMMessage(session, content);
         ciphertext = encrypted.ciphertext;
         nonce = encrypted.nonce;
-        encryptionType = EncryptionType.PAIRWISE;
       } else {
-        // Distribute our sender key to all group members before first message
-        await distributeSenderKeyToAll(roomId, currentUser.id, memberKeys, socket);
-        const encrypted = await encryptGroupMessage(roomId, content, currentUser.id);
-        ciphertext = encrypted.ciphertext;
-        nonce = encrypted.nonce;
-        senderKeyId = encrypted.senderKeyId;
-        encryptionType = EncryptionType.SENDER_KEY;
+        // Group: encrypt per-recipient using pairwise sessions (same as DM)
+        recipientCopies = [];
+        const members = room?.members ?? [];
+        for (const member of members) {
+          const recipientId = member.userId;
+          // For own copy: use self pairwise session
+          // For others: use pairwise session with that member
+          const peerUserId = recipientId === currentUser.id ? currentUser.id : recipientId;
+          const keys = memberKeys.get(peerUserId);
+          if (!keys) continue;
+          const session = await getPairwiseSession(
+            peerUserId,
+            keys.identityKey,
+            keys.signedPreKey,
+            keys.preKeySignature,
+            roomId,
+          );
+          const encrypted = await encryptDMMessage(session, content);
+          recipientCopies.push({
+            recipientUserId: recipientId,
+            ciphertext: encrypted.ciphertext,
+            nonce: encrypted.nonce,
+          });
+        }
+        // Use first copy as the payload ciphertext/nonce (required by type)
+        ciphertext = recipientCopies[0]?.ciphertext ?? '';
+        nonce = recipientCopies[0]?.nonce ?? '';
       }
 
       // Handle edit vs new message
@@ -382,8 +315,8 @@ const ChatRoomPage = () => {
           ciphertext,
           nonce,
           encryptionType,
-          senderKeyId,
           messageType: MessageType.TEXT,
+          recipientCopies,
         }, () => {
           // Acknowledged
         });

@@ -39,8 +39,9 @@ export const encryptWithSenderKey = (
 ): { encrypted: EncryptedPayload; updatedKey: SenderKey } => {
   const messageKey = deriveMessageKeyFromChain(senderKey.chainKey);
   const encrypted = encrypt(messageKey, plaintext);
-  const updatedKey = ratchetChainKey(senderKey);
-  return { encrypted, updatedKey };
+  // Static key — no ratcheting. All messages use the same derived key.
+  // Random nonces in AES-GCM ensure uniqueness per message.
+  return { encrypted, updatedKey: senderKey };
 };
 
 export const decryptWithSenderKey = (
@@ -50,8 +51,7 @@ export const decryptWithSenderKey = (
 ): { plaintext: Uint8Array; updatedKey: SenderKey } => {
   const messageKey = deriveMessageKeyFromChain(senderKey.chainKey);
   const plaintext = decrypt(messageKey, ciphertext, nonce);
-  const updatedKey = ratchetChainKey(senderKey);
-  return { plaintext, updatedKey };
+  return { plaintext, updatedKey: senderKey };
 };
 
 export const serializeSenderKey = (key: SenderKey): Uint8Array => {
