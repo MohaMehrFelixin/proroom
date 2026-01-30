@@ -82,6 +82,7 @@ const CallPage = () => {
   const mountedRef = useRef(true);
 
   const [remoteStreams, setRemoteStreams] = useState<RemoteStreamEntry[]>([]);
+  const [mediaError, setMediaError] = useState<string | null>(null);
 
   const handleToggleAudio = useCallback(() => {
     const producer = producersRef.current.get('audio');
@@ -210,29 +211,38 @@ const CallPage = () => {
     setActiveRoom(roomId);
 
     try {
-      // Respect lobby preferences for audio/video
-      const wantVideo = useCallStore.getState().isVideoEnabled;
+      // Reuse stream from lobby if available, otherwise acquire new one
+      const storeState = useCallStore.getState();
       let stream: MediaStream;
-      let hasVideo = wantVideo;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: wantVideo,
-        });
-      } catch {
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          hasVideo = false;
-        } catch {
-          setStatus('idle');
-          router.push(`/chat/${roomId}`);
-          return;
-        }
-      }
+      let hasVideo = storeState.isVideoEnabled;
 
-      // If audio was disabled in lobby, mute the audio tracks
-      if (!useCallStore.getState().isAudioEnabled) {
-        stream.getAudioTracks().forEach((t) => (t.enabled = false));
+      if (storeState.localStream && storeState.localStream.getTracks().some((t) => t.readyState === 'live')) {
+        // Lobby handed us a live stream — reuse it
+        stream = storeState.localStream;
+      } else {
+        // No lobby stream — acquire fresh (direct navigation or stream died)
+        const wantVideo = storeState.isVideoEnabled;
+        hasVideo = wantVideo;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: wantVideo,
+          });
+        } catch {
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            hasVideo = false;
+          } catch {
+            setStatus('idle');
+            setMediaError('Could not access your camera or microphone. Check your browser permissions.');
+            return;
+          }
+        }
+
+        // Apply lobby mute preferences
+        if (!storeState.isAudioEnabled) {
+          stream.getAudioTracks().forEach((t) => (t.enabled = false));
+        }
       }
 
       // Track this stream so cleanup can always find it
@@ -352,6 +362,7 @@ const CallPage = () => {
     } catch (err) {
       console.error('Failed to join call:', err);
       setStatus('idle');
+      setMediaError('Failed to connect to the call. Please try again.');
     }
   }, [roomId, setStatus, setActiveRoom, setLocalStream, setVideoEnabled, removeParticipant, setPinnedUser, router, reset]);
 
@@ -474,8 +485,39 @@ const CallPage = () => {
     }
   }, [roomId]);
 
+  if (mediaError) {
+    return (
+      <div className="flex h-[100dvh] flex-col items-center justify-center bg-tg-bg-dark p-6 text-center sm:h-full">
+        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-500/10">
+          <svg className="h-8 w-8 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+          </svg>
+        </div>
+        <h2 className="mb-2 text-lg font-semibold text-tg-text">Cannot Join Call</h2>
+        <p className="mb-6 max-w-xs text-sm text-tg-text-secondary">{mediaError}</p>
+        <div className="flex gap-3">
+          <button
+            onClick={() => router.push(`/chat/${roomId}`)}
+            className="rounded-xl bg-tg-bg-input px-6 py-2.5 text-sm font-medium text-tg-text transition-colors hover:bg-tg-border"
+          >
+            Back to Chat
+          </button>
+          <button
+            onClick={() => {
+              setMediaError(null);
+              joinCall();
+            }}
+            className="rounded-xl bg-tg-accent px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-tg-accent/90"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex h-full flex-col bg-tg-bg-dark">
+    <div className="flex h-[100dvh] flex-col bg-tg-bg-dark sm:h-full">
       <CallHeader
         roomName={callTitle || room?.name || roomId}
         participantCount={participantCount}

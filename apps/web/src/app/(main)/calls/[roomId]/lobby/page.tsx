@@ -92,13 +92,18 @@ const LobbyPage = () => {
     stream.getAudioTracks().forEach((t) => (t.enabled = isAudioEnabled));
   }, [isAudioEnabled]);
 
+  const { setLocalStream } = useCallStore();
+
   const handleJoin = useCallback(() => {
-    // Stop preview stream — the call page will acquire its own
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
+    // Hand the stream to the call store — the call page will reuse it
+    // instead of re-acquiring (avoids mobile camera race condition)
     cancelAnimationFrame(animFrameRef.current);
+    if (streamRef.current) {
+      setLocalStream(streamRef.current);
+      streamRef.current = null; // prevent cleanup from stopping it
+    }
     router.push(`/calls/${roomId}`);
-  }, [router, roomId]);
+  }, [router, roomId, setLocalStream]);
 
   const handleCancel = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -110,7 +115,7 @@ const LobbyPage = () => {
   const displayTitle = callTitle || room?.name || 'Call';
 
   return (
-    <div className="flex h-full flex-col items-center justify-center bg-tg-bg-dark p-4">
+    <div className="flex h-[100dvh] flex-col items-center justify-center bg-tg-bg-dark p-4 sm:h-full">
       <div className="w-full max-w-md space-y-6">
         {/* Title */}
         <div className="text-center">

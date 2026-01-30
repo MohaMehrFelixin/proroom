@@ -21,7 +21,7 @@ export const CallControls = ({
   onToggleScreenShare,
   onLeave,
 }: CallControlsProps) => (
-  <div className="flex items-center justify-center gap-2 bg-tg-bg-secondary/80 px-4 py-3 backdrop-blur-sm sm:gap-3">
+  <div className="flex items-center justify-center gap-2 bg-tg-bg-secondary/80 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm sm:gap-3 sm:pb-3">
     {/* Mic */}
     <button
       onClick={onToggleAudio}
