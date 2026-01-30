@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-CONF="/etc/coturn/turnserver.conf"
+CONF="/tmp/turnserver.conf"
 TEMPLATE="/etc/coturn/turnserver.conf.template"
 
 # Copy template and replace env vars
