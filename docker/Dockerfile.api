@@ -21,19 +21,19 @@ RUN cd packages/types && pnpm build
 RUN cd packages/crypto && pnpm build
 RUN cd apps/api && npx prisma generate && pnpm build
 
-FROM base AS runner
+FROM node:20-alpine AS runner
+RUN corepack enable pnpm
 WORKDIR /app
 ENV NODE_ENV=production
+RUN npm install -g prisma@6
 COPY --from=builder /app/apps/api/dist ./dist
 COPY --from=builder /app/apps/api/prisma ./prisma
 COPY --from=builder /app/apps/api/node_modules ./node_modules
 COPY --from=builder /app/node_modules/.pnpm ./node_modules/.pnpm
-COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
-COPY --from=builder /app/node_modules/.bin/prisma ./node_modules/.bin/prisma
 COPY --from=builder /app/packages/crypto/dist ./node_modules/@proroom/crypto/dist
 COPY --from=builder /app/packages/crypto/package.json ./node_modules/@proroom/crypto/
 COPY --from=builder /app/packages/types/dist ./node_modules/@proroom/types/dist
 COPY --from=builder /app/packages/types/package.json ./node_modules/@proroom/types/
 
 EXPOSE 4000
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
+CMD ["sh", "-c", "prisma migrate deploy && node dist/main.js"]
