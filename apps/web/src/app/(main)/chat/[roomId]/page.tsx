@@ -13,6 +13,8 @@ import {
   encryptGroupMessage,
   decryptGroupMessage,
   distributeSenderKey,
+  receiveSenderKey,
+  distributeSenderKeyToAll,
 } from '@/lib/crypto';
 import { getCachedMessages, setCachedMessages, appendCachedMessage, updateCachedMessage } from '@/lib/message-cache';
 import { ChatHeader } from '@/components/chat/ChatHeader';
@@ -190,6 +192,14 @@ const ChatRoomPage = () => {
         addMessage(roomId, decrypted);
         await appendCachedMessage(currentUser?.id ?? '', roomId, decrypted);
       } catch {
+        // If group message decryption fails, request sender key resync
+        if (msg.encryptionType === 'SENDER_KEY' && currentUser) {
+          try {
+            socket.emit('senderkey:request', { roomId, requesterId: currentUser.id });
+          } catch {
+            // Socket not ready
+          }
+        }
         const fallback = {
           id: msg.id,
           roomId: msg.roomId,
@@ -249,11 +259,45 @@ const ChatRoomPage = () => {
     };
     socket.on('senderkey:request' as Parameters<typeof socket.on>[0], handleSenderKeyRequest);
 
+    // Listen for incoming sender key distributions
+    const handleSenderKeyDistribute = async (data: {
+      roomId: string;
+      senderUserId: string;
+      recipientUserId: string;
+      encryptedSenderKey: string;
+      nonce: string;
+      keyId: string;
+    }) => {
+      if (data.roomId !== roomId || data.recipientUserId !== currentUser?.id) return;
+      const senderKeys = memberKeys.get(data.senderUserId);
+      if (!senderKeys) return;
+      try {
+        const session = await getPairwiseSession(
+          data.senderUserId,
+          senderKeys.identityKey,
+          senderKeys.signedPreKey,
+          senderKeys.preKeySignature,
+          roomId,
+        );
+        await receiveSenderKey(
+          data.senderUserId,
+          roomId,
+          session,
+          data.encryptedSenderKey,
+          data.nonce,
+        );
+      } catch {
+        // Failed to receive sender key
+      }
+    };
+    socket.on('senderkey:distribute' as Parameters<typeof socket.on>[0], handleSenderKeyDistribute);
+
     return () => {
       socket.off('message:new', handleNewMessage);
       socket.off('message:edited', handleEdited);
       socket.off('message:deleted', handleDeleted);
       socket.off('senderkey:request' as Parameters<typeof socket.off>[0], handleSenderKeyRequest);
+      socket.off('senderkey:distribute' as Parameters<typeof socket.off>[0], handleSenderKeyDistribute);
       socket.emit('room:leave', roomId);
     };
   }, [roomId, addMessage, editMessage, deleteMessage, decryptEncryptedMessage, currentUser, memberKeys]);
@@ -315,6 +359,8 @@ const ChatRoomPage = () => {
         nonce = encrypted.nonce;
         encryptionType = EncryptionType.PAIRWISE;
       } else {
+        // Distribute our sender key to all group members before first message
+        await distributeSenderKeyToAll(roomId, currentUser.id, memberKeys, socket);
         const encrypted = await encryptGroupMessage(roomId, content, currentUser.id);
         ciphertext = encrypted.ciphertext;
         nonce = encrypted.nonce;

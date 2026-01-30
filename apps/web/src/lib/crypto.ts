@@ -71,11 +71,14 @@ export const getPublicKeysForUpload = async () => {
 
 // Pairwise session cache
 const sessionCache = new Map<string, PairwiseSession>();
+// Track which rooms we've already distributed our sender key to
+const distributedRooms = new Set<string>();
 
 export const clearCryptoState = (): void => {
   sessionCache.clear();
   senderKeyCache.clear();
   senderKeysLoaded = false;
+  distributedRooms.clear();
 };
 
 export const getPairwiseSession = async (
@@ -252,6 +255,42 @@ export const receiveSenderKey = async (
   const senderKey = deserializeSenderKey(decrypted);
   senderKeyCache.set(`${senderUserId}:${roomId}`, senderKey);
   await persistSenderKeys();
+};
+
+export const distributeSenderKeyToAll = async (
+  roomId: string,
+  myUserId: string,
+  memberKeys: Map<string, { userId: string; identityKey: string; signedPreKey: string; preKeySignature: string }>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  socket: { emit: (...args: any[]) => any },
+): Promise<void> => {
+  const cacheKey = `${myUserId}:${roomId}`;
+  if (distributedRooms.has(cacheKey)) return;
+  distributedRooms.add(cacheKey);
+
+  for (const [userId, keys] of memberKeys) {
+    if (userId === myUserId) continue;
+    try {
+      const session = await getPairwiseSession(
+        userId,
+        keys.identityKey,
+        keys.signedPreKey,
+        keys.preKeySignature,
+        roomId,
+      );
+      const distributed = await distributeSenderKey(roomId, session);
+      socket.emit('senderkey:distribute', {
+        roomId,
+        senderUserId: myUserId,
+        recipientUserId: userId,
+        encryptedSenderKey: distributed.encryptedSenderKey,
+        nonce: distributed.nonce,
+        keyId: distributed.keyId,
+      });
+    } catch {
+      // Failed to distribute to this member
+    }
+  }
 };
 
 // ---- File encryption ----
