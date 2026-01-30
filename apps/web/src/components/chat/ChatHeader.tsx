@@ -5,7 +5,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { getAvatarUrl } from '@/lib/avatar';
 import { useAuthStore } from '@/stores/auth';
 import { useChatStore } from '@/stores/chat';
-import { getChatSocket, getMediaSocket } from '@/lib/socket';
+import { getMediaSocket } from '@/lib/socket';
 import type { Room } from '@proroom/types';
 
 interface ChatHeaderProps {
