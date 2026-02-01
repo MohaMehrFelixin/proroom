@@ -9,7 +9,12 @@ const AVATAR_BUCKET = 'proroom-avatars';
 const MAX_FILE_SIZE_MB = 100;
 const MAX_AVATAR_SIZE_MB = 5;
 const PRESIGNED_URL_EXPIRY = 3600; // 1 hour
-const ALLOWED_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const ALLOWED_AVATAR_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+];
 
 @Injectable()
 export class FilesService implements OnModuleInit {
@@ -20,13 +25,26 @@ export class FilesService implements OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
   ) {
+    const endpoint = this.config.get('MINIO_ENDPOINT', 'localhost');
+    const port = parseInt(this.config.get('MINIO_PORT', '9000'));
     this.minioClient = new Minio.Client({
-      endPoint: this.config.get('MINIO_ENDPOINT', 'localhost'),
-      port: parseInt(this.config.get('MINIO_PORT', '9000')),
+      endPoint: endpoint,
+      port,
       useSSL: false,
       accessKey: this.config.getOrThrow('MINIO_ACCESS_KEY'),
       secretKey: this.config.getOrThrow('MINIO_SECRET_KEY'),
     });
+    this.minioInternalOrigin = `http://${endpoint}:${port}`;
+    this.publicStorageBase =
+      this.config.get('FRONTEND_URL', '') + '/storage';
+  }
+
+  private readonly minioInternalOrigin: string;
+  private readonly publicStorageBase: string;
+
+  private rewritePresignedUrl(url: string): string {
+    if (!this.publicStorageBase) return url;
+    return url.replace(this.minioInternalOrigin, this.publicStorageBase);
   }
 
   async onModuleInit() {
@@ -87,7 +105,7 @@ export class FilesService implements OnModuleInit {
       PRESIGNED_URL_EXPIRY,
     );
 
-    return { fileId, uploadUrl };
+    return { fileId, uploadUrl: this.rewritePresignedUrl(uploadUrl) };
   }
 
   async getAvatarUploadUrl(userId: string, mimeType: string, size: number) {
@@ -110,7 +128,10 @@ export class FilesService implements OnModuleInit {
       PRESIGNED_URL_EXPIRY,
     );
 
-    return { uploadUrl, storagePath };
+    return {
+      uploadUrl: this.rewritePresignedUrl(uploadUrl),
+      storagePath,
+    };
   }
 
   async getDownloadUrl(fileId: string) {
@@ -127,7 +148,7 @@ export class FilesService implements OnModuleInit {
     );
 
     return {
-      downloadUrl,
+      downloadUrl: this.rewritePresignedUrl(downloadUrl),
       fileName: file.fileName,
       mimeType: file.mimeType,
       size: file.size,
